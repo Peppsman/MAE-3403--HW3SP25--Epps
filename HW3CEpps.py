@@ -12,103 +12,188 @@ with preset values of 1 available. The solution vectors are printed
 nicely along with an indication of which numerical method was used.
 """
 
-import numpy as np  # Import the numpy library for numerical operations
+#I used Copilet to create most of this.
+#import
+#region 
+
+import math
+#endregion
+#symmetric
+#region 
 
 def is_symmetric(matrix):
-    # Check if a matrix is symmetric
-    return np.allclose(matrix, matrix.T)
+    """
+    Check if a matrix is symmetric.
+    """
+    n = len(matrix)
+    for i in range(n):
+        for j in range(n):
+            if matrix[i][j] != matrix[j][i]:
+                return False
+    return True
+#endregion
 
+#Positive
+#region
 def is_positive_definite(matrix):
-    # Check if a matrix is positive definite
-    try:
-        np.linalg.cholesky(matrix)
-        return True
-    except np.linalg.LinAlgError:
-        return False
-
-def cholesky_solve(A, b):
-    # Solve the matrix equation Ax=b using the Cholesky method
-    L = np.linalg.cholesky(A)  # Perform Cholesky decomposition
-    y = np.linalg.solve(L, b)  # Solve Ly=b
-    x = np.linalg.solve(L.T, y)  # Solve L^T x=y
-    return x  # Return the solution vector x
-
-def doolittle_solve(A, b):
-    # Solve the matrix equation Ax=b using the Doolittle method
-    n = len(A)
-    L = np.zeros((n, n))  # Initialize L matrix
-    U = np.zeros((n, n))  # Initialize U matrix
-
-    # Perform LU Decomposition
+    """
+    Check if a matrix is positive definite.
+    """
+    n = len(matrix)
     for i in range(n):
-        for j in range(i, n):
-            L[j][i] = A[j][i] - sum(L[j][k] * U[k][i] for k in range(i))
-        for j in range(i, n):
+        if matrix[i][i] <= 0:
+            return False
+        for j in range(i):
+            if matrix[i][j] != matrix[j][i]:
+                return False
+    return True
+#endregion
+
+#Cholesky
+#region
+
+def cholesky_decomposition(matrix):
+    """
+    Perform the Cholesky decomposition of a matrix.
+    """
+    n = len(matrix)
+    L = [[0.0] * n for _ in range(n)]
+
+    for i in range(n):
+        for j in range(i + 1):
+            sum_k = sum(L[i][k] * L[j][k] for k in range(j))
+
             if i == j:
-                U[i][i] = 1
+                L[i][j] = math.sqrt(matrix[i][i] - sum_k)
             else:
-                U[i][j] = (A[i][j] - sum(L[i][k] * U[k][j] for k in range(i))) / L[i][i]
+                L[i][j] = (matrix[i][j] - sum_k) / L[j][j]
 
-    # Solve Ly = b
-    y = np.zeros(n)
+    return L
+#endregion
+#Doolittle
+#region
+
+def doolittle_decomposition(matrix):
+    """
+    Perform the Doolittle decomposition of a matrix (LU factorization).
+    """
+    n = len(matrix)
+    L = [[0.0] * n for _ in range(n)]
+    U = [[0.0] * n for _ in range(n)]
+
     for i in range(n):
-        y[i] = b[i] - sum(L[i][j] * y[j] for j in range(i))
+        L[i][i] = 1.0
+        for j in range(i, n):
+            U[i][j] = matrix[i][j] - sum(L[i][k] * U[k][j] for k in range(i))
+        for j in range(i + 1, n):
+            L[j][i] = (matrix[j][i] - sum(L[j][k] * U[k][i] for k in range(i))) / U[i][i]
 
+    return L, U
+#endregion
 
-    # Solve Ux = y
-    x = np.zeros(n)
-    for i in range(n-1, -1, -1):
-        x[i] = (y[i] - sum(U[i][j] * x[j] for j in range(i+1, n))) / U[i][i]
+#Gauss Seidel
+#region
 
-    return x  # Return the solution vector x
+def gauss_seidel(matrix, b, tol=1e-10, max_iter=1000):
+    """
+    Solve the matrix equation Ax = b using the Gauss-Seidel method.
+    """
+    n = len(matrix)
+    x = [0.0] * n
 
-def gauss_seidel_solve(A, b, tolerance=1e-10, max_iterations=1000):
-    # Solve the matrix equation Ax=b using the Gauss-Seidel method
-    n = len(A)
-    x = np.zeros(n)  # Initialize the solution vector x
-    for _ in range(max_iterations):
-        x_new = np.copy(x)  # Create a copy of x for updating
+    for _ in range(max_iter):
+        x_new = x.copy()
+
         for i in range(n):
-            sum1 = sum(A[i][j] * x_new[j] for j in range(i))
-            sum2 = sum(A[i][j] * x[j] for j in range(i + 1, n))
-            x_new[i] = (b[i] - sum1 - sum2) / A[i][i]  # Update the ith element of x
-        if np.linalg.norm(x_new - x) < tolerance:  # Check for convergence
-            break
-        x = x_new  # Update x for the next iteration
-    return x  # Return the solution vector x
+            sum_j = sum(matrix[i][j] * x_new[j] for j in range(n) if j != i)
+            x_new[i] = (b[i] - sum_j) / matrix[i][i]
 
+        if math.sqrt(sum((x_new[i] - x[i]) ** 2 for i in range(n))) < tol:
+            return x_new
+
+        x = x_new
+
+    return x
+#endregion
+
+#solve all this crazyness
+#region
+def solve_cholesky(matrix, b):
+    """
+    Solve the matrix equation Ax = b using the Cholesky decomposition.
+    """
+    L = cholesky_decomposition(matrix)
+    n = len(L)
+
+    # Forward substitution to solve Ly = b
+    y = [0.0] * n
+    for i in range(n):
+        y[i] = (b[i] - sum(L[i][k] * y[k] for k in range(i))) / L[i][i]
+
+    # Backward substitution to solve L^T x = y
+    x = [0.0] * n
+    for i in reversed(range(n)):
+        x[i] = (y[i] - sum(L[j][i] * x[j] for j in range(i + 1, n))) / L[i][i]
+
+    return x
+
+
+def solve_doolittle(matrix, b):
+    """
+    Solve the matrix equation Ax = b using the Doolittle decomposition.
+    """
+    L, U = doolittle_decomposition(matrix)
+    n = len(L)
+
+    # Forward substitution to solve Ly = b
+    y = [0.0] * n
+    for i in range(n):
+        y[i] = (b[i] - sum(L[i][k] * y[k] for k in range(i))) / L[i][i]
+
+    # Backward substitution to solve Ux = y
+    x = [0.0] * n
+    for i in reversed(range(n)):
+        x[i] = (y[i] - sum(U[i][k] * x[k] for k in range(i + 1, n))) / U[i][i]
+
+    return x
+#endregion
+
+#Main function 
+#region
 def main():
-    # Main function to check matrix properties and solve Ax=b
-    A = np.zeros((4, 4))  # Initialize a 4x4 matrix with zeros
-    print("Enter the elements of a 4x4 matrix row by row (or type '1' for preset values):")
-    for i in range(4):
-        row = input(f"Row {i+1}: ")
-        if row.strip() == '1':
-            A[i] = np.ones(4)  # Use preset values of 1 for the row
-        else:
-            A[i] = [float(x) for x in row.split()]  # Convert input to float and assign to the row
+    """
+    Main function to interact with the user, obtain inputs, and solve matrix equations.
+    """
+    n = int(input("Enter the dimension of the matrix:  "))
+    matrix = [[0.0] * n for _ in range(n)]
+    b = [0.0] * n
 
-    print("Enter the elements of the vector b (or type '1' for preset values):")
-    b_input = input()
-    if b_input.strip() == '1':
-        b = np.ones(4)  # Use preset values of 1 for the vector b
+    print("Enter the elements of the matrix row-wise:")
+    for i in range(n):
+        row = input().split()
+        if len(row) != n:
+            print(f"Error: Expected {n} elements for row {i + 1}, but got {len(row)} elements.")
+            return
+        matrix[i] = list(map(float, row))
+
+    print("Enter the elements of the vector b:")
+    b = list(map(float, input().split()))
+    if len(b) != n:
+        print(f"Error: Expected {n} elements for vector b, but got {len(b)} elements.")
+        return
+
+    if is_symmetric(matrix) and is_positive_definite(matrix):
+        print("Using Cholesky method...")
+        x = solve_cholesky(matrix, b)
     else:
-        b = [float(x) for x in b_input.split()]  # Convert input to float and assign to vector b
-
-    print("Matrix A:")
-    print(A)  # Print the matrix A
-    print("Vector b:")
-    print(b)  # Print the vector b
-
-    if is_symmetric(A) and is_positive_definite(A):
-        print("Using Cholesky method:")
-        x = cholesky_solve(A, b)  # Solve using the Cholesky method
-    else:
-        print("Using Doolittle method:")
-        x = doolittle_solve(A, b)  # Solve using the Doolittle method
+        print("Using Doolittle method...")
+        x = solve_doolittle(matrix, b)
 
     print("Solution vector x:")
-    print(x)  # Print the solution vector x
+    for val in x:
+        print(val)
+
 
 if __name__ == "__main__":
-    main()  # Run the main function when the script is executed
+    main()
+#endregion
