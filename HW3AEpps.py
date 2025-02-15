@@ -1,118 +1,92 @@
 #MAE 3403 HW3ASP25 Epps, Patrick (PBE)
 
+# I used copilet to create the scafolding and added values as needed
 
-import numpy as np
+import math
+import random
 
-def simpsons_rule(f, a, b, n):
+
+def normal_pdf(x, mu, sigma):
+    """
+    Compute the normal probability density function (PDF).
+    """
+    return (1 / (sigma * math.sqrt(2 * math.pi))) * math.exp(-0.5 * ((x - mu) / sigma) ** 2)
+
+
+def simpsons_rule(f, a, b, n, mu, sigma):
     """
     Perform numerical integration using Simpson's 1/3 method.
-
-    Parameters:
-    f (function): The function to integrate.
-    a (float): The lower limit of integration.
-    b (float): The upper limit of integration.
-    n (int): The number of subintervals (must be even).
-
-    Returns:
-    float: The integral of f from a to b.
     """
     if n % 2 == 1:
-        n += 1  # Ensure n is even
-
+        n += 1  # n must be even
     h = (b - a) / n
-    integral = f(a) + f(b)
+    integral = f(a, mu, sigma) + f(b, mu, sigma)
 
-    for i in range(1, n, 2):
-        integral += 4 * f(a + i * h)
-    for i in range(2, n - 1, 2):
-        integral += 2 * f(a + i * h)
+    for i in range(1, n):
+        x = a + i * h
+        if i % 2 == 0:
+            integral += 2 * f(x, mu, sigma)
+        else:
+            integral += 4 * f(x, mu, sigma)
 
     integral *= h / 3
     return integral
 
-def normal_pdf(x, mu, sigma):
+
+def normal_probability(mu, sigma, c, lower_bound=True):
     """
-    Normal probability density function.
-
-    Parameters:
-    x (float): The variable.
-    mu (float): The mean.
-    sigma (float): The standard deviation.
-
-    Returns:
-    float: The value of the normal PDF at x.
+    Compute the probability for the normal distribution.
     """
-    return (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
-
-def compute_probability(mu, sigma, c, double_sided=True):
-    """
-    Compute the probability for the given parameters.
-
-    Parameters:
-    mu (float): The mean.
-    sigma (float): The standard deviation.
-    c (float): The value of c.
-    double_sided (bool): Whether to compute double-sided probability.
-
-    Returns:
-    float: The computed probability.
-    """
-    if double_sided:
-        a = mu - (c - mu)
-        b = mu + (c - mu)
+    if lower_bound:
+        a, b = mu - 5 * sigma, c
     else:
-        a = mu - 5 * sigma
-        b = c
+        a, b = mu - (c - mu), mu + (c - mu)
+    return simpsons_rule(normal_pdf, a, b, 1000, mu, sigma)
 
-    return simpsons_rule(lambda x: normal_pdf(x, mu, sigma), a, b, 1000)
 
-def secant_method(f, a, b, tol=1e-6, max_iter=100):
+def secant_method(f, target, x0, x1, tol=1e-6, max_iter=100):
     """
-    Use the Secant method to find the root of the function f.
-
-    Parameters:
-    f (function): The function whose root we want to find.
-    a (float): The initial guess.
-    b (float): The second guess.
-    tol (float): The tolerance for convergence.
-    max_iter (int): The maximum number of iterations.
-
-    Returns:
-    float: The value of the root.
+    Use the Secant method to find the value of x that matches the target value.
     """
     for _ in range(max_iter):
-        fa = f(a)
-        fb = f(b)
-        if abs(fb - fa) < tol:
-            return b
-        c = b - fb * (b - a) / (fb - fa)
-        if abs(c - b) < tol:
-            return c
-        a, b = b, c
-    return b
+        fx0 = f(x0) - target
+        fx1 = f(x1) - target
+        if abs(fx1 - fx0) < tol:
+            break
+        x2 = x1 - fx1 * (x1 - x0) / (fx1 - fx0)
+        x0, x1 = x1, x2
+        if abs(f(x1) - target) < tol:
+            return x1
+    return x1
+
 
 def main():
-    # Solicit input from the user
+    """
+    Main function to interact with the user, obtain inputs, and compute probabilities or values of c.
+    """
     mu = float(input("Enter the mean (μ): "))
     sigma = float(input("Enter the standard deviation (σ): "))
-    mode = input("Are you specifying 'c' and seeking 'P' or specifying 'P' and seeking 'c'? (Enter 'c' or 'P'): ").strip().lower()
+    choice = input("Are you specifying c and seeking P or specifying P and seeking c? (c/P): ").strip().lower()
 
-    if mode == 'c':
+    if choice == 'c':
         c = float(input("Enter the value of c: "))
-        double_sided = input("Is it double-sided probability? (yes or no): ").strip().lower() == 'yes'
-        P = compute_probability(mu, sigma, c, double_sided)
-        print(f"The computed probability is: {P:.6f}")
+        single_sided = input("Do you want a single-sided probability? (yes/no): ").strip().lower() == 'yes'
+        prob = normal_probability(mu, sigma, c, lower_bound=single_sided)
+        print(f"Probability: {prob}")
+    elif choice == 'p':
+        target_prob = float(input("Enter the desired probability: "))
+        single_sided = input("Do you want a single-sided probability? (yes/no): ").strip().lower() == 'yes'
+        lower_bound = single_sided
 
-    elif mode == 'p':
-        P = float(input("Enter the desired probability: "))
-        double_sided = input("Is it double-sided probability? (yes or no): ").strip().lower() == 'yes'
-        target_function = lambda c: compute_probability(mu, sigma, c, double_sided) - P
-        c = secant_method(target_function, mu, mu + sigma)
-        print(f"The value of c that matches the desired probability is: {c:.6f}")
+        def prob_diff(c):
+            return normal_probability(mu, sigma, c, lower_bound=lower_bound)
 
+        c = secant_method(prob_diff, target_prob, mu - 5 * sigma, mu + 5 * sigma)
+        print(f"Value of c: {c}")
     else:
-        print("Invalid input. Please enter 'c' or 'P'.")
+        print("Invalid choice. Please specify 'c' or 'P'.")
+
 
 if __name__ == "__main__":
     main()
-    # Run the main function when the script is executed
+
